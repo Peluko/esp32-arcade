@@ -1,0 +1,3 @@
+[submodule "lib/esp32-ble-gamepad"]
+	path = lib/esp32-ble-gamepad
+	url = https://github.com/Peluko/ESP32-BLE-Gamepad.git
