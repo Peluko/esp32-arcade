@@ -1,21 +1,22 @@
 
 #include <Arduino.h>
+#include <driver/rtc_io.h>
 
 #include "gamepad_input.h"
 
-#define OUTPUT_LED 15
+#define OUTPUT_LED 23
 
 #define INPUT_DUP 17
 #define INPUT_DDOWN 18
 #define INPUT_DLEFT 19
 #define INPUT_DRIGHT 21
 
-#define INPUT_BUTTON_1 22
-#define INPUT_BUTTON_2 23
+#define INPUT_BUTTON_1 GPIO_NUM_15
+#define INPUT_BUTTON_2 GPIO_NUM_4
 
 struct button_map_t
 {
-    uint8_t gpio_number;
+    gpio_num_t gpio_number;
     uint16_t button;
 };
 
@@ -69,6 +70,7 @@ void gamepad_setup(BleGamepad *bt_hid)
     for (const auto button : buttonMap)
     {
         pinMode(button.gpio_number, INPUT_PULLDOWN);
+        rtc_gpio_hold_en(button.gpio_number);
         *btpt++ = LOW;
     }
 
@@ -81,9 +83,14 @@ void gamepad_setup(BleGamepad *bt_hid)
     pinMode(OUTPUT_LED, OUTPUT);
 }
 
-void gamepad_read()
+// 000 -> no changes
+// xx1 -> button pressed
+// x1x -> button released
+// 1xx -> direction changed
+uint8_t gamepad_read()
 {
     auto btpt = button_state;
+    uint8_t changes = false;
     for (const auto button : buttonMap)
     {
         auto current_state = digitalRead(button.gpio_number);
@@ -91,11 +98,13 @@ void gamepad_read()
         {
             if (current_state == HIGH)
             {
+                changes |= 0x01;
                 bleHid->press(button.button);
                 digitalWrite(OUTPUT_LED, HIGH);
             }
             else
             {
+                changes |= 0x02;
                 bleHid->release(button.button);
                 digitalWrite(OUTPUT_LED, LOW);
             }
@@ -116,12 +125,19 @@ void gamepad_read()
     auto current_dpad_state = dpad_map[dpad_index];
     if (current_dpad_state != dpad_state)
     {
-        for (const auto s : tmp)
-        {
-            Serial.printf("Input: %d\n", s);
-        }
-        Serial.printf("DPad index: %04X, Dpad direction: %d\n", dpad_index, current_dpad_state);
         bleHid->setHat(current_dpad_state);
         dpad_state = current_dpad_state;
+        changes |= 0x04;
     }
+    return changes;
+}
+
+uint64_t gamepad_get_button_mask()
+{
+    uint64_t mask = 0;
+    for (const auto button : buttonMap)
+    {
+        mask |= 1 << button.gpio_number;
+    }
+    return mask;
 }

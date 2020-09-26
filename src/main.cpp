@@ -2,62 +2,74 @@
 
 #include <BleGamepad.h>
 #include "gamepad_input.h"
+#include "Blinker.h"
 
 using namespace std;
 
 BleGamepad bleGamepad("ESP32 Arcade", "Peluko", 100);
+
+Blinker connectedBlinker(1000, 1000);
+Blinker disconnectedBlinker(2000, 100);
+
+#define NOTIFICATION_LED 23
+#define ONBOARD_LED 2
+
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
+}
 
 void setup()
 {
   Serial.begin(115200);
   Serial.println("Starting BLE work!");
 
+  print_wakeup_reason();
+
   gamepad_setup(&bleGamepad);
 
   bleGamepad.begin();
+
+  pinMode(NOTIFICATION_LED, OUTPUT);
+  pinMode(ONBOARD_LED, OUTPUT);
+  esp_sleep_enable_ext1_wakeup(gamepad_get_button_mask(), ESP_EXT1_WAKEUP_ANY_HIGH);
 }
 
+#define SLEEP_TIME (10*60*1000)
 void loop()
 {
+  static unsigned long last_active = millis();
+
+  bool activity = false;
+
   if (bleGamepad.isConnected())
   {
-    gamepad_read();
-    delay(4);
+    activity = gamepad_read() != 0;
+    digitalWrite(ONBOARD_LED, connectedBlinker.checkState() ? HIGH : LOW);
   }
-}
+  else
+  {
+    digitalWrite(ONBOARD_LED, disconnectedBlinker.checkState() ? HIGH : LOW);
+  }
 
-void test2()
-{
-  static int hatPos = 0;
+  auto current_ms = millis();
+  if(activity) {
+    last_active = current_ms;
+  } else if((current_ms - last_active) > SLEEP_TIME) {
+    Serial.println("Going to sleep...");
+    esp_deep_sleep_start();
+  }
 
-  hatPos++;
-
-  int button = 1 << (hatPos & 0x000F);
-
-  bleGamepad.press(button);
-
-  bleGamepad.setHat((hatPos & 7) + 1);
-  Serial.printf("Hat: %d\n, button: %d\n", hatPos, button);
-
-  delay(1000);
-  bleGamepad.release(button);
-}
-
-void test1()
-{
-  int ledPin = 2;
-  Serial.println("Press buttons 1 and 14. Move all axes to max. Set DPAD to down right.");
-  bleGamepad.press(BUTTON_14);
-  bleGamepad.press(BUTTON_1);
-  bleGamepad.setAxes(127, 127, 127, 127, 127, 127, DPAD_DOWN_RIGHT);
-  delay(500);
-  digitalWrite(ledPin, HIGH);
-  Serial.println("on");
-
-  Serial.println("Release button 14. Move all axes to min. Set DPAD to centred.");
-  bleGamepad.release(BUTTON_14);
-  bleGamepad.setAxes(-127, -127, -127, -127, -127, -127, DPAD_CENTERED);
-  delay(500);
-  digitalWrite(ledPin, LOW);
-  Serial.println("off");
+  delay(4);
 }
