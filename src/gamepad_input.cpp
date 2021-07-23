@@ -4,15 +4,33 @@
 
 #include "gamepad_input.h"
 
-#define OUTPUT_LED 23
+#define POWER_LED GPIO_NUM_23
+#define BT_LED GPIO_NUM_22
 
-#define INPUT_DUP 17
-#define INPUT_DDOWN 18
-#define INPUT_DLEFT 19
-#define INPUT_DRIGHT 21
+#define LED_A GPIO_NUM_13
+#define LED_B GPIO_NUM_12
+#define LED_X GPIO_NUM_14
+#define LED_Y GPIO_NUM_27
+#define LED_L GPIO_NUM_26
+#define LED_R GPIO_NUM_25
 
-#define INPUT_BUTTON_1 GPIO_NUM_15
-#define INPUT_BUTTON_2 GPIO_NUM_4
+#define INPUT_DUP GPIO_NUM_4 
+#define INPUT_DDOWN GPIO_NUM_5
+#define INPUT_DLEFT GPIO_NUM_16
+#define INPUT_DRIGHT GPIO_NUM_17
+
+#define INPUT_A GPIO_NUM_32
+#define INPUT_B GPIO_NUM_33
+#define INPUT_X GPIO_NUM_34
+#define INPUT_Y GPIO_NUM_35
+#define INPUT_L GPIO_NUM_36
+#define INPUT_R GPIO_NUM_39
+
+#define INPUT_SELECT GPIO_NUM_21
+#define INPUT_START GPIO_NUM_19
+
+#define INPUT_MENU GPIO_NUM_18
+
 
 struct button_map_t
 {
@@ -21,8 +39,15 @@ struct button_map_t
 };
 
 const button_map_t buttonMap[] = {
-    {INPUT_BUTTON_1, BUTTON_1},
-    {INPUT_BUTTON_2, BUTTON_2}};
+    {INPUT_A, BUTTON_1},
+    {INPUT_B, BUTTON_2},
+    {INPUT_X, BUTTON_3},
+    {INPUT_Y, BUTTON_4},
+    {INPUT_L, BUTTON_5},
+    {INPUT_R, BUTTON_6}
+    {INPUT_SELECT, BUTTON_7},
+    {INPUT_START, BUTTON_8},
+    {INPUT_MENU, BUTTON_9}};
 
 /* The four directional inputs are used to construct a four-bit index over the
    'dpad_map' table to obtain the Gamepad direction code.
@@ -69,7 +94,7 @@ void gamepad_setup(BleGamepad *bt_hid)
     auto btpt = button_state;
     for (const auto button : buttonMap)
     {
-        pinMode(button.gpio_number, INPUT_PULLDOWN);
+        pinMode(button.gpio_number, INPUT_PULLUP);
         rtc_gpio_hold_en(button.gpio_number);
         *btpt++ = LOW;
     }
@@ -77,10 +102,10 @@ void gamepad_setup(BleGamepad *bt_hid)
     dpad_state = DPAD_CENTERED;
     for (const auto gpio_number : dpad_gpio_numbers)
     {
-        pinMode(gpio_number, INPUT_PULLDOWN);
+        pinMode(gpio_number, INPUT_PULLUP);
     }
 
-    pinMode(OUTPUT_LED, OUTPUT);
+    pinMode(POWER_LED, OUTPUT);
 }
 
 // 000 -> no changes
@@ -90,7 +115,7 @@ void gamepad_setup(BleGamepad *bt_hid)
 uint8_t gamepad_read()
 {
     auto btpt = button_state;
-    uint8_t changes = false;
+    uint8_t changes = 0;
     for (const auto button : buttonMap)
     {
         auto current_state = digitalRead(button.gpio_number);
@@ -100,13 +125,13 @@ uint8_t gamepad_read()
             {
                 changes |= 0x01;
                 bleHid->press(button.button);
-                digitalWrite(OUTPUT_LED, HIGH);
+                digitalWrite(POWER_LED, HIGH);
             }
             else
             {
                 changes |= 0x02;
                 bleHid->release(button.button);
-                digitalWrite(OUTPUT_LED, LOW);
+                digitalWrite(POWER_LED, LOW);
             }
         }
         *btpt++ = current_state;
