@@ -11,7 +11,9 @@ BleGamepad bleGamepad("ESP32 Arcade", "Peluko", 100);
 Blinker connectedBlinker(1000, 1000);
 Blinker disconnectedBlinker(2000, 100);
 
-#define NOTIFICATION_LED 23
+#define POWER_LED GPIO_NUM_23
+#define BT_LED GPIO_NUM_22
+
 #define ONBOARD_LED 2
 
 void print_wakeup_reason(){
@@ -41,7 +43,8 @@ void setup()
 
   bleGamepad.begin();
 
-  pinMode(NOTIFICATION_LED, OUTPUT);
+  pinMode(POWER_LED, OUTPUT);
+  pinMode(BT_LED, OUTPUT);
   pinMode(ONBOARD_LED, OUTPUT);
   esp_sleep_enable_ext1_wakeup(gamepad_get_button_mask(), ESP_EXT1_WAKEUP_ANY_HIGH);
 }
@@ -53,14 +56,18 @@ void loop()
 
   bool activity = false;
 
+  digitalWrite(POWER_LED, HIGH);
+
   if (bleGamepad.isConnected())
   {
     activity = gamepad_read() != 0;
     digitalWrite(ONBOARD_LED, connectedBlinker.checkState() ? HIGH : LOW);
+    digitalWrite(BT_LED, connectedBlinker.checkState() ? HIGH : LOW);
   }
   else
   {
     digitalWrite(ONBOARD_LED, disconnectedBlinker.checkState() ? HIGH : LOW);
+    digitalWrite(BT_LED, disconnectedBlinker.checkState() ? HIGH : LOW);
   }
 
   auto current_ms = millis();

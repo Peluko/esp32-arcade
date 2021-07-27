@@ -4,50 +4,48 @@
 
 #include "gamepad_input.h"
 
-#define POWER_LED GPIO_NUM_23
-#define BT_LED GPIO_NUM_22
+#define LED_A GPIO_NUM_14
+#define LED_B GPIO_NUM_13
+#define LED_X GPIO_NUM_27
+#define LED_Y GPIO_NUM_12
+#define LED_L GPIO_NUM_25
+#define LED_R GPIO_NUM_26
 
-#define LED_A GPIO_NUM_13
-#define LED_B GPIO_NUM_12
-#define LED_X GPIO_NUM_14
-#define LED_Y GPIO_NUM_27
-#define LED_L GPIO_NUM_26
-#define LED_R GPIO_NUM_25
-
-#define INPUT_DUP GPIO_NUM_4 
-#define INPUT_DDOWN GPIO_NUM_5
+#define INPUT_DUP GPIO_NUM_17
+#define INPUT_DDOWN GPIO_NUM_15
 #define INPUT_DLEFT GPIO_NUM_16
-#define INPUT_DRIGHT GPIO_NUM_17
+#define INPUT_DRIGHT GPIO_NUM_4
 
-#define INPUT_A GPIO_NUM_32
-#define INPUT_B GPIO_NUM_33
-#define INPUT_X GPIO_NUM_34
-#define INPUT_Y GPIO_NUM_35
-#define INPUT_L GPIO_NUM_36
-#define INPUT_R GPIO_NUM_39
+#define INPUT_A GPIO_NUM_35
+#define INPUT_B GPIO_NUM_34
+#define INPUT_X GPIO_NUM_32
+#define INPUT_Y GPIO_NUM_33
+#define INPUT_L GPIO_NUM_39
+#define INPUT_R GPIO_NUM_36
 
-#define INPUT_SELECT GPIO_NUM_21
-#define INPUT_START GPIO_NUM_19
+#define INPUT_SELECT GPIO_NUM_19
+#define INPUT_START GPIO_NUM_18
 
-#define INPUT_MENU GPIO_NUM_18
+#define INPUT_MENU GPIO_NUM_21
 
 
 struct button_map_t
 {
     gpio_num_t gpio_number;
     uint16_t button;
+    gpio_num_t led;
 };
 
 const button_map_t buttonMap[] = {
-    {INPUT_A, BUTTON_1},
-    {INPUT_B, BUTTON_2},
-    {INPUT_X, BUTTON_3},
-    {INPUT_Y, BUTTON_4},
-    {INPUT_L, BUTTON_5},
-    {INPUT_R, BUTTON_6}
-    {INPUT_SELECT, BUTTON_7},
-    {INPUT_START, BUTTON_8},
-    {INPUT_MENU, BUTTON_9}};
+    {INPUT_A, BUTTON_1, LED_A},
+    {INPUT_B, BUTTON_2, LED_B},
+    {INPUT_X, BUTTON_3, LED_X},
+    {INPUT_Y, BUTTON_4, LED_Y},
+    {INPUT_L, BUTTON_5, LED_R},
+    {INPUT_R, BUTTON_6, LED_L},
+    {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX}, // GPIO_NUM_MAX means no led
+    {INPUT_START, BUTTON_8, GPIO_NUM_MAX},
+    {INPUT_MENU, BUTTON_9, GPIO_NUM_MAX}};
 
 /* The four directional inputs are used to construct a four-bit index over the
    'dpad_map' table to obtain the Gamepad direction code.
@@ -64,7 +62,7 @@ const uint8_t dpad_map[] = {
     DPAD_DOWN_RIGHT, // 0110
     DPAD_DOWN,       // 0111 -> left + down + right
     DPAD_UP,         // 1000
-    DPAD_UP_LEFT,    // 1001
+    DPAD_UP_LEFT,    // 1001 
     DPAD_CENTERED,   // 1010 -> up + down
     DPAD_LEFT,       // 1011 -> up + down + left
     DPAD_UP_RIGHT,   // 1100
@@ -95,6 +93,9 @@ void gamepad_setup(BleGamepad *bt_hid)
     for (const auto button : buttonMap)
     {
         pinMode(button.gpio_number, INPUT_PULLUP);
+        if(button.led != GPIO_NUM_MAX) {
+            pinMode(button.led, OUTPUT);
+        }
         rtc_gpio_hold_en(button.gpio_number);
         *btpt++ = LOW;
     }
@@ -103,9 +104,8 @@ void gamepad_setup(BleGamepad *bt_hid)
     for (const auto gpio_number : dpad_gpio_numbers)
     {
         pinMode(gpio_number, INPUT_PULLUP);
+        rtc_gpio_hold_en((gpio_num_t) gpio_number);
     }
-
-    pinMode(POWER_LED, OUTPUT);
 }
 
 // 000 -> no changes
@@ -123,15 +123,16 @@ uint8_t gamepad_read()
         {
             if (current_state == HIGH)
             {
-                changes |= 0x01;
-                bleHid->press(button.button);
-                digitalWrite(POWER_LED, HIGH);
+                changes |= 0x02;
+                bleHid->release(button.button);
             }
             else
             {
-                changes |= 0x02;
-                bleHid->release(button.button);
-                digitalWrite(POWER_LED, LOW);
+                changes |= 0x01;
+                bleHid->press(button.button);
+            }
+            if(button.led != GPIO_NUM_MAX) {
+                digitalWrite(button.led, !current_state);
             }
         }
         *btpt++ = current_state;
