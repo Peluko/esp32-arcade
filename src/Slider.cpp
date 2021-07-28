@@ -4,11 +4,12 @@
 
 Slider::Slider(int num_leds)
 {
-    _start_ms = millis();
     _wait_ms = 3000;
     _light_ms = 150;
     _num_leds = num_leds;
     _reseted = true;
+    _start_ms = millis();
+    _start_ms = _start_ms > _wait_ms ? (_start_ms - _wait_ms) : 0;
 }
 
 void Slider::reset()

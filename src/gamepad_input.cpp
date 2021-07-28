@@ -45,8 +45,17 @@ const button_map_t buttonMap[] = {
     {INPUT_L, BUTTON_5, LED_L},
     {INPUT_R, BUTTON_6, LED_R},
     {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX}, // GPIO_NUM_MAX means no led
-    {INPUT_START, BUTTON_8, GPIO_NUM_MAX},
-    {INPUT_MENU, BUTTON_9, GPIO_NUM_MAX}};
+    {INPUT_START, BUTTON_8, GPIO_NUM_MAX}};
+
+const button_map_t altButtonMap[] = {
+    {INPUT_A, BUTTON_9, LED_A},
+    {INPUT_B, BUTTON_10, LED_B},
+    {INPUT_X, BUTTON_11, LED_X},
+    {INPUT_Y, BUTTON_12, LED_Y},
+    {INPUT_L, BUTTON_13, LED_L},
+    {INPUT_R, BUTTON_14, LED_R},
+    {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX}, // GPIO_NUM_MAX means no led
+    {INPUT_START, BUTTON_8, GPIO_NUM_MAX}};
 
 const gpio_num_t buttonLedList[] = {
     LED_Y,
@@ -91,7 +100,7 @@ const uint8_t dpad_gpio_numbers[] = {
 uint16_t *button_state;
 uint8_t dpad_state;
 
-Slider ledSlider(sizeof(buttonLedList)/sizeof(gpio_num_t));
+Slider ledSlider(sizeof(buttonLedList) / sizeof(gpio_num_t));
 
 BleGamepad *bleHid;
 
@@ -118,6 +127,9 @@ void gamepad_setup(BleGamepad *bt_hid)
         pinMode(gpio_number, INPUT_PULLUP);
         rtc_gpio_hold_en((gpio_num_t)gpio_number);
     }
+
+    pinMode(INPUT_MENU, INPUT_PULLUP);
+    rtc_gpio_hold_en(INPUT_MENU);
 }
 
 // x000 -> no changes
@@ -127,9 +139,24 @@ void gamepad_setup(BleGamepad *bt_hid)
 // 1xxx -> some button is pressed
 uint8_t gamepad_read()
 {
+    static bool menu_mode = true;
+    static bool last_menu_pushed = false;
+    static bool launch_menu_on_release = false;
+    auto menu_pushed = digitalRead(INPUT_MENU) != HIGH;
+
+    // If on menu release it has not been used for
+    // key combo, then launch menu
+    if(menu_pushed != last_menu_pushed) {
+        if(menu_pushed) {
+            launch_menu_on_release = true;
+        } else {
+            menu_mode = launch_menu_on_release;
+        }
+    }
+
     auto btpt = button_state;
     uint8_t changes = 0;
-    for (const auto button : buttonMap)
+    for (const auto button : (menu_pushed ? altButtonMap : buttonMap))
     {
         auto current_state = digitalRead(button.gpio_number);
         if (current_state != *btpt)
@@ -143,6 +170,8 @@ uint8_t gamepad_read()
             {
                 changes |= 0x01;
                 bleHid->press(button.button);
+                // Alt button pressed, do not launch menu on button release
+                launch_menu_on_release = false;
             }
         }
         if (button.led != GPIO_NUM_MAX)
@@ -181,11 +210,6 @@ uint8_t gamepad_read()
                          [](int led, bool lighted)
                          {
                              digitalWrite(buttonLedList[led], lighted);
-                             if (lighted)
-                             {
-                                //  Serial.print("Encendido ");
-                                //  Serial.println(led);
-                             }
                          });
     return changes;
 }
