@@ -78,5 +78,5 @@ void loop()
     esp_deep_sleep_start();
   }
 
-  delay(104);
+  delay(4);
 }
