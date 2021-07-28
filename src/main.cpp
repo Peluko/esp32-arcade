@@ -9,7 +9,7 @@ using namespace std;
 BleGamepad bleGamepad("ESP32 Arcade", "Peluko", 100);
 
 Blinker connectedBlinker(1000, 1000);
-Blinker disconnectedBlinker(2000, 100);
+Blinker disconnectedBlinker(1000, 100);
 
 #define POWER_LED GPIO_NUM_23
 #define BT_LED GPIO_NUM_22
@@ -58,9 +58,9 @@ void loop()
 
   digitalWrite(POWER_LED, HIGH);
 
+  activity = gamepad_read() != 0;
   if (bleGamepad.isConnected())
   {
-    activity = gamepad_read() != 0;
     digitalWrite(ONBOARD_LED, connectedBlinker.checkState() ? HIGH : LOW);
     digitalWrite(BT_LED, connectedBlinker.checkState() ? HIGH : LOW);
   }
