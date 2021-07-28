@@ -321,7 +321,7 @@ void send_button_hid(physical_button_t *button)
     }
 }
 
-bool normal_loop()
+bool normal_loop(bool connected)
 {
     if (menu_button.ph_changed_state && !menu_button.ph_pressed_state)
     {
@@ -348,7 +348,7 @@ bool normal_loop()
     }
     some_pressed |= dpad_state |= DPAD_CENTERED;
 
-    ledSlider.doLighting(some_pressed,
+    ledSlider.doLighting(some_pressed || !connected,
                          [](int led, bool lighted)
                          {
                              digitalWrite(buttonLedList[led], lighted);
@@ -357,7 +357,7 @@ bool normal_loop()
 }
 
 // returns true if some button is pressed or held
-bool gamepad_read()
+bool gamepad_read(bool connected)
 {
     read_physical_buttons();
 
@@ -367,7 +367,7 @@ bool gamepad_read()
     }
     else
     {
-        return normal_loop();
+        return normal_loop(connected);
     }
 }
 

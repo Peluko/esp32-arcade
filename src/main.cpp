@@ -58,7 +58,7 @@ void loop()
 
   digitalWrite(POWER_LED, HIGH);
 
-  activity = gamepad_read() != 0;
+  activity = gamepad_read(bleGamepad.isConnected()) != 0;
   if (bleGamepad.isConnected())
   {
     digitalWrite(ONBOARD_LED, connectedBlinker.checkState() ? HIGH : LOW);
