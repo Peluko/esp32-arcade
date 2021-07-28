@@ -30,6 +30,11 @@
 
 #define INPUT_MENU GPIO_NUM_21
 
+#define AUTOFIRE_PCT_CHANGE 5 // (AUTOFIRE_INITIAL_RATE * AUTOFIRE_PCT_CHANGE) / 100 must be >= 1
+#define AUTOFIRE_INITIAL_RATE 20
+#define AUTOFIRE_MIN_RATE 10
+#define AUTOFIRE_MAX_RATE 2000
+
 const gpio_num_t buttonLedList[] = {
     LED_Y,
     LED_X,
@@ -86,16 +91,16 @@ struct physical_button_t
 
 // Definitions and state storage
 physical_button_t buttons[] = {
-    {INPUT_A, BUTTON_1, LED_A, false, false, false, false, false, 10, 0},
-    {INPUT_B, BUTTON_2, LED_B, false, false, false, false, false, 10, 0},
-    {INPUT_X, BUTTON_3, LED_X, false, false, false, false, false, 10, 0},
-    {INPUT_Y, BUTTON_4, LED_Y, false, false, false, false, false, 10, 0},
-    {INPUT_L, BUTTON_5, LED_L, false, false, false, false, false, 10, 0},
-    {INPUT_R, BUTTON_6, LED_R, false, false, false, false, false, 10, 0}};
+    {INPUT_A, BUTTON_1, LED_A, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
+    {INPUT_B, BUTTON_2, LED_B, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
+    {INPUT_X, BUTTON_3, LED_X, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
+    {INPUT_Y, BUTTON_4, LED_Y, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
+    {INPUT_L, BUTTON_5, LED_L, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
+    {INPUT_R, BUTTON_6, LED_R, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0}};
 
-physical_button_t select_button = { INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX, false, false, false, false, false, 10, 0}; // GPIO_NUM_MAX means no led
-physical_button_t start_button = { INPUT_START, BUTTON_8, GPIO_NUM_MAX, false, false, false, false, false, 10, 0};
-physical_button_t menu_button = {INPUT_MENU, 0, GPIO_NUM_MAX, false, false, false, false, false, 10, 0};
+physical_button_t select_button = { INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0}; // GPIO_NUM_MAX means no led
+physical_button_t start_button = { INPUT_START, BUTTON_8, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0};
+physical_button_t menu_button = {INPUT_MENU, 0, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0};
 
 bool dpad_changed;
 uint8_t dpad_state;
@@ -140,7 +145,7 @@ void button_read(physical_button_t *button)
     if(button->autofire && pressed) {
         auto now = millis();
         auto ellapsed = now - button->last_millis;
-        auto rate = button->autofire_rate > 10 ? button->autofire_rate : 10;
+        auto rate = button->autofire_rate > AUTOFIRE_MIN_RATE ? button->autofire_rate : AUTOFIRE_MIN_RATE;
         if(ellapsed > rate) {
             button->auto_changed_state = true;
             button->auto_pressed_state = !button->auto_pressed_state;
@@ -257,12 +262,7 @@ bool menu_loop()
         static bool autofire_lit = false;
         auto now = millis();
         auto ellapsed = now - last_millis;
-        auto rate = last_button_pressed_on_menu->autofire_rate > 10 ? last_button_pressed_on_menu->autofire_rate : last_button_pressed_on_menu->autofire_rate;
-        // Serial.println("--");
-        // Serial.println(autofire_lit);
-        // Serial.println(now);
-        // Serial.println(last_millis);
-        // Serial.println(rate);
+        auto rate = last_button_pressed_on_menu->autofire_rate > AUTOFIRE_MIN_RATE ? last_button_pressed_on_menu->autofire_rate : AUTOFIRE_MIN_RATE;
         if(ellapsed > rate) {
             autofire_lit = !autofire_lit;
             last_millis = now;
@@ -276,7 +276,7 @@ bool menu_loop()
 
         if(last_button_pressed_on_menu->ph_changed_state && last_button_pressed_on_menu->ph_pressed_state) {
             last_button_pressed_on_menu->autofire = !last_button_pressed_on_menu->autofire;
-            last_button_pressed_on_menu->autofire_rate = 10;
+            last_button_pressed_on_menu->autofire_rate = AUTOFIRE_INITIAL_RATE;
         }
 
         if(start_button.ph_pressed_state) {
@@ -284,9 +284,9 @@ bool menu_loop()
             auto ellapsed = now - last_millis;
             if(ellapsed > 100) {
                 last_millis = now;
-                last_button_pressed_on_menu->autofire_rate -= 1;
-                if(last_button_pressed_on_menu->autofire_rate < 10) {
-                    last_button_pressed_on_menu->autofire_rate = 10;
+                last_button_pressed_on_menu->autofire_rate -= (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                if(last_button_pressed_on_menu->autofire_rate < AUTOFIRE_MIN_RATE) {
+                    last_button_pressed_on_menu->autofire_rate = AUTOFIRE_MIN_RATE;
                 }
             }
         }
@@ -295,9 +295,9 @@ bool menu_loop()
             auto ellapsed = now - last_millis;
             if(ellapsed > 100) {
                 last_millis = now;
-                last_button_pressed_on_menu->autofire_rate += 1;
-                if(last_button_pressed_on_menu->autofire_rate > 10000) {
-                    last_button_pressed_on_menu->autofire_rate = 10000;
+                last_button_pressed_on_menu->autofire_rate += (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                if(last_button_pressed_on_menu->autofire_rate > AUTOFIRE_MAX_RATE) {
+                    last_button_pressed_on_menu->autofire_rate = AUTOFIRE_MAX_RATE;
                 }
             }
         }
