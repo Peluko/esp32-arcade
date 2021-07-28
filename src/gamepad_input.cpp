@@ -30,33 +30,6 @@
 
 #define INPUT_MENU GPIO_NUM_21
 
-struct button_map_t
-{
-    gpio_num_t gpio_number;
-    uint16_t button;
-    gpio_num_t led;
-};
-
-const button_map_t buttonMap[] = {
-    {INPUT_A, BUTTON_1, LED_A},
-    {INPUT_B, BUTTON_2, LED_B},
-    {INPUT_X, BUTTON_3, LED_X},
-    {INPUT_Y, BUTTON_4, LED_Y},
-    {INPUT_L, BUTTON_5, LED_L},
-    {INPUT_R, BUTTON_6, LED_R},
-    {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX}, // GPIO_NUM_MAX means no led
-    {INPUT_START, BUTTON_8, GPIO_NUM_MAX}};
-
-const button_map_t altButtonMap[] = {
-    {INPUT_A, BUTTON_9, LED_A},
-    {INPUT_B, BUTTON_10, LED_B},
-    {INPUT_X, BUTTON_11, LED_X},
-    {INPUT_Y, BUTTON_12, LED_Y},
-    {INPUT_L, BUTTON_13, LED_L},
-    {INPUT_R, BUTTON_14, LED_R},
-    {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX}, // GPIO_NUM_MAX means no led
-    {INPUT_START, BUTTON_8, GPIO_NUM_MAX}};
-
 const gpio_num_t buttonLedList[] = {
     LED_Y,
     LED_X,
@@ -97,7 +70,29 @@ const uint8_t dpad_gpio_numbers[] = {
     INPUT_DDOWN,
     INPUT_DLEFT};
 
-uint16_t *button_state;
+struct physical_button_t
+{
+    gpio_num_t gpio_number;
+    uint16_t button;
+    gpio_num_t led;
+    bool pressed_state; // Last pressed stated
+    bool changed_state; // State changed last time checked
+};
+
+// Definitions and state storage
+physical_button_t buttons[] = {
+    {INPUT_A, BUTTON_1, LED_A, false},
+    {INPUT_B, BUTTON_2, LED_B, false},
+    {INPUT_X, BUTTON_3, LED_X, false},
+    {INPUT_Y, BUTTON_4, LED_Y, false},
+    {INPUT_L, BUTTON_5, LED_L, false},
+    {INPUT_R, BUTTON_6, LED_R, false},
+    {INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX, false}, // GPIO_NUM_MAX means no led
+    {INPUT_START, BUTTON_8, GPIO_NUM_MAX, false}};
+
+physical_button_t menu_button = {INPUT_MENU, 0, GPIO_NUM_MAX, false};
+
+bool dpad_changed;
 uint8_t dpad_state;
 
 Slider ledSlider(sizeof(buttonLedList) / sizeof(gpio_num_t));
@@ -108,9 +103,7 @@ void gamepad_setup(BleGamepad *bt_hid)
 {
     bleHid = bt_hid;
 
-    button_state = new uint16_t[sizeof(buttonMap) / sizeof(*buttonMap)];
-    auto btpt = button_state;
-    for (const auto button : buttonMap)
+    for (const auto button : buttons)
     {
         pinMode(button.gpio_number, INPUT_PULLUP);
         if (button.led != GPIO_NUM_MAX)
@@ -118,7 +111,6 @@ void gamepad_setup(BleGamepad *bt_hid)
             pinMode(button.led, OUTPUT);
         }
         rtc_gpio_hold_en(button.gpio_number);
-        *btpt++ = LOW;
     }
 
     dpad_state = DPAD_CENTERED;
@@ -132,92 +124,141 @@ void gamepad_setup(BleGamepad *bt_hid)
     rtc_gpio_hold_en(INPUT_MENU);
 }
 
-// x000 -> no changes
-// xxx1 -> button pressed
-// xx1x -> button released
-// x1xx -> direction changed
-// 1xxx -> some button is pressed
-uint8_t gamepad_read()
+void button_read(physical_button_t &button)
 {
-    static bool menu_mode = true;
-    static bool last_menu_pushed = false;
-    static bool launch_menu_on_release = false;
-    auto menu_pushed = digitalRead(INPUT_MENU) != HIGH;
+    auto pressed = digitalRead(button.gpio_number) != HIGH;
+    button.changed_state = pressed != button.pressed_state;
+    button.pressed_state = pressed;
+}
 
-    // If on menu release it has not been used for
-    // key combo, then launch menu
-    if(menu_pushed != last_menu_pushed) {
-        if(menu_pushed) {
-            launch_menu_on_release = true;
-        } else {
-            menu_mode = launch_menu_on_release;
-        }
-    }
-
-    auto btpt = button_state;
-    uint8_t changes = 0;
-    for (const auto button : (menu_pushed ? altButtonMap : buttonMap))
+void button_release_all()
+{
+    for (auto &button : buttons)
     {
-        auto current_state = digitalRead(button.gpio_number);
-        if (current_state != *btpt)
+        if (!button.changed_state && button.pressed_state)
         {
-            if (current_state == HIGH)
-            {
-                changes |= 0x02;
-                bleHid->release(button.button);
-            }
-            else
-            {
-                changes |= 0x01;
-                bleHid->press(button.button);
-                // Alt button pressed, do not launch menu on button release
-                launch_menu_on_release = false;
-            }
+            button.pressed_state = false;
+            button.changed_state = true;
         }
-        if (button.led != GPIO_NUM_MAX)
-        {
-            digitalWrite(button.led, !current_state);
-            if (current_state != HIGH)
-            {
-                changes |= 0x08;
-            }
-        }
-        *btpt++ = current_state;
     }
+}
 
+void button_led(const physical_button_t &button, bool on)
+{
+    if (button.led != GPIO_NUM_MAX)
+    {
+        digitalWrite(button.led, on ? HIGH : LOW);
+    }
+}
+
+void button_led_all(bool on)
+{
+    for (auto &button : buttons)
+    {
+        button_led(button, on);
+    }
+}
+
+bool dpad_read()
+{
     uint8_t dpad_index = 0;
-    uint8_t tmp[4];
-    uint8_t *tmpp = tmp;
     for (const auto gpio_number : dpad_gpio_numbers)
     {
         auto input_state = digitalRead(gpio_number);
         dpad_index <<= 1;
         dpad_index |= input_state;
-        *tmpp++ = input_state;
-        if (input_state != HIGH)
-        {
-            changes |= 0x08;
-        }
     }
-    auto current_dpad_state = dpad_map[dpad_index];
-    if (current_dpad_state != dpad_state)
+    auto changed = dpad_map[dpad_index] != dpad_state;
+    dpad_state = dpad_map[dpad_index];
+    return changed;
+}
+
+void read_physical_buttons()
+{
+    button_read(menu_button);
+    for (auto &button : buttons)
     {
-        bleHid->setHat(current_dpad_state);
-        dpad_state = current_dpad_state;
-        changes |= 0x04;
+        button_read(button);
     }
-    ledSlider.doLighting(changes,
+    dpad_changed = dpad_read();
+}
+
+bool menu_mode = false;
+
+bool menu_loop()
+{
+    if (menu_button.changed_state && !menu_button.pressed_state)
+    {
+        menu_mode = false;
+        button_release_all();
+        button_led_all(false);
+    }
+}
+
+bool normal_loop()
+{
+    if (menu_button.changed_state && !menu_button.pressed_state)
+    {
+        menu_mode = true;
+        button_release_all();
+        button_led_all(true);
+        return true;
+    }
+
+    auto some_pressed = false;
+
+    for (auto &button : buttons)
+    {
+        if (button.changed_state)
+        {
+            if (button.pressed_state)
+            {
+                bleHid->press(button.button);
+            }
+            else
+            {
+                bleHid->release(button.button);
+            }
+        }
+
+        button_led(button, button.pressed_state);
+        some_pressed |= button.pressed_state;
+    }
+
+    if (dpad_changed)
+    {
+        bleHid->setHat(dpad_state);
+    }
+    some_pressed |= dpad_state |= DPAD_CENTERED;
+
+    ledSlider.doLighting(some_pressed,
                          [](int led, bool lighted)
                          {
                              digitalWrite(buttonLedList[led], lighted);
                          });
-    return changes;
+    return some_pressed;
 }
+
+// returns true if some button is pressed or held
+bool gamepad_read()
+{
+    read_physical_buttons();
+
+    if (menu_mode)
+    {
+        return menu_loop();
+    }
+    else
+    {
+        return normal_loop();
+    }
+}
+
 
 uint64_t gamepad_get_button_mask()
 {
     uint64_t mask = 0;
-    for (const auto button : buttonMap)
+    for (const auto button : buttons)
     {
         mask |= 1 << button.gpio_number;
     }

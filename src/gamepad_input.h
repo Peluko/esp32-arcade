@@ -4,7 +4,7 @@
 #include <BleGamepad.h>
 
 void gamepad_setup(BleGamepad *bt_hid);
-uint8_t gamepad_read();
+bool gamepad_read();
 uint64_t gamepad_get_button_mask();
 
 #endif
