@@ -6,30 +6,6 @@
 
 #include "gamepad_input.h"
 
-#define LED_A GPIO_NUM_14
-#define LED_B GPIO_NUM_13
-#define LED_X GPIO_NUM_27
-#define LED_Y GPIO_NUM_12
-#define LED_L GPIO_NUM_26
-#define LED_R GPIO_NUM_25
-
-#define INPUT_DUP GPIO_NUM_17
-#define INPUT_DDOWN GPIO_NUM_15
-#define INPUT_DLEFT GPIO_NUM_16
-#define INPUT_DRIGHT GPIO_NUM_4
-
-#define INPUT_A GPIO_NUM_35
-#define INPUT_B GPIO_NUM_34
-#define INPUT_X GPIO_NUM_32
-#define INPUT_Y GPIO_NUM_33
-#define INPUT_L GPIO_NUM_39
-#define INPUT_R GPIO_NUM_36
-
-#define INPUT_SELECT GPIO_NUM_19
-#define INPUT_START GPIO_NUM_18
-
-#define INPUT_MENU GPIO_NUM_21
-
 #define AUTOFIRE_PCT_CHANGE 5 // (AUTOFIRE_INITIAL_RATE * AUTOFIRE_PCT_CHANGE) / 100 must be >= 1
 #define AUTOFIRE_INITIAL_RATE 20
 #define AUTOFIRE_MIN_RATE 10
@@ -120,20 +96,23 @@ void gamepad_setup(BleGamepad *bt_hid)
         {
             pinMode(button.led, OUTPUT);
         }
-        rtc_gpio_hold_en(button.gpio_number);
+        // esp_sleep_enable_ext0_wakeup(button.gpio_number, GPIO_INTR_HIGH_LEVEL);
+        // rtc_gpio_hold_en(button.gpio_number);
     }
 
     dpad_state = DPAD_CENTERED;
     for (const auto gpio_number : dpad_gpio_numbers)
     {
         pinMode(gpio_number, INPUT_PULLUP);
-        rtc_gpio_hold_en((gpio_num_t)gpio_number);
+        // rtc_gpio_hold_en((gpio_num_t)gpio_number);
     }
 
     pinMode(INPUT_SELECT, INPUT_PULLUP);
     pinMode(INPUT_START, INPUT_PULLUP);
     pinMode(INPUT_MENU, INPUT_PULLUP);
-    rtc_gpio_hold_en(INPUT_MENU);
+    // rtc_gpio_hold_en(INPUT_SELECT);
+    // rtc_gpio_hold_en(INPUT_START);
+    // rtc_gpio_hold_en(INPUT_MENU);
 }
 
 void button_read(physical_button_t *button)
@@ -284,7 +263,9 @@ bool menu_loop()
             auto ellapsed = now - last_millis;
             if(ellapsed > 100) {
                 last_millis = now;
-                last_button_pressed_on_menu->autofire_rate -= (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                auto inc = (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                inc = inc > 0 ? inc : 1;
+                last_button_pressed_on_menu->autofire_rate -= inc;
                 if(last_button_pressed_on_menu->autofire_rate < AUTOFIRE_MIN_RATE) {
                     last_button_pressed_on_menu->autofire_rate = AUTOFIRE_MIN_RATE;
                 }
@@ -295,7 +276,9 @@ bool menu_loop()
             auto ellapsed = now - last_millis;
             if(ellapsed > 100) {
                 last_millis = now;
-                last_button_pressed_on_menu->autofire_rate += (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                auto inc = (last_button_pressed_on_menu->autofire_rate * AUTOFIRE_PCT_CHANGE) / 100;
+                inc = inc > 0 ? inc : 1;
+                last_button_pressed_on_menu->autofire_rate += inc;
                 if(last_button_pressed_on_menu->autofire_rate > AUTOFIRE_MAX_RATE) {
                     last_button_pressed_on_menu->autofire_rate = AUTOFIRE_MAX_RATE;
                 }
@@ -377,7 +360,7 @@ uint64_t gamepad_get_button_mask()
     uint64_t mask = 0;
     for (const auto button : buttons)
     {
-        mask |= 1 << button.gpio_number;
+        mask |= 1ULL << button.gpio_number;
     }
     return mask;
 }

@@ -16,40 +16,33 @@ Blinker disconnectedBlinker(1000, 100);
 
 #define ONBOARD_LED 2
 
-void print_wakeup_reason(){
-  esp_sleep_wakeup_cause_t wakeup_reason;
-
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch(wakeup_reason)
-  {
-    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
-    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
-  }
-}
-
+#define SLEEP_TIME (10*60*1000)
+#define SLEEP_LED_TIME_uS (5 * 1000000)
 void setup()
 {
-  Serial.begin(115200);
-  Serial.println("Starting BLE work!");
+  pinMode(POWER_LED, OUTPUT);
+  pinMode(BT_LED, OUTPUT);
+  pinMode(ONBOARD_LED, OUTPUT);
 
-  print_wakeup_reason();
+  esp_sleep_enable_ext0_wakeup(INPUT_B, 0);
+  esp_sleep_enable_timer_wakeup(SLEEP_LED_TIME_uS);
+
+  if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+    digitalWrite(POWER_LED, HIGH);
+    delay(100);
+    esp_deep_sleep_start();
+    return; // never reached
+  }
 
   gamepad_setup(&bleGamepad);
 
   bleGamepad.begin();
 
-  pinMode(POWER_LED, OUTPUT);
-  pinMode(BT_LED, OUTPUT);
-  pinMode(ONBOARD_LED, OUTPUT);
-  esp_sleep_enable_ext1_wakeup(gamepad_get_button_mask(), ESP_EXT1_WAKEUP_ANY_HIGH);
+  Serial.begin(115200);
+  Serial.println("");
+  Serial.println("ESP32 Gamepad started");
 }
 
-#define SLEEP_TIME (10*60*1000)
 void loop()
 {
   static unsigned long last_active = millis();
