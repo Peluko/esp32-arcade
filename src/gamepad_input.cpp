@@ -55,28 +55,31 @@ struct physical_button_t
 {
     gpio_num_t gpio_number;
     uint16_t button;
+    uint16_t alt_button;
     gpio_num_t led;
+    unsigned long autofire_rate;
     bool ph_pressed_state; // Last pressed state
     bool ph_changed_state; // State changed last time checked
+    bool alt_pressed_state;
+    bool alt_changed_state;
     bool autofire;
     bool auto_pressed_state;
     bool auto_changed_state;
-    unsigned long autofire_rate;
     unsigned long last_millis;
 };
 
 // Definitions and state storage
 physical_button_t buttons[] = {
-    {INPUT_A, BUTTON_1, LED_A, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
-    {INPUT_B, BUTTON_2, LED_B, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
-    {INPUT_X, BUTTON_3, LED_X, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
-    {INPUT_Y, BUTTON_4, LED_Y, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
-    {INPUT_L, BUTTON_5, LED_L, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0},
-    {INPUT_R, BUTTON_6, LED_R, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0}};
+    {INPUT_A, BUTTON_1, BUTTON_9, LED_A, AUTOFIRE_INITIAL_RATE},
+    {INPUT_B, BUTTON_2, BUTTON_10, LED_B, AUTOFIRE_INITIAL_RATE},
+    {INPUT_X, BUTTON_3, BUTTON_11, LED_X, AUTOFIRE_INITIAL_RATE},
+    {INPUT_Y, BUTTON_4, BUTTON_12, LED_Y, AUTOFIRE_INITIAL_RATE},
+    {INPUT_L, BUTTON_5, BUTTON_13, LED_L, AUTOFIRE_INITIAL_RATE},
+    {INPUT_R, BUTTON_6, BUTTON_14, LED_R, AUTOFIRE_INITIAL_RATE}};
 
-physical_button_t select_button = { INPUT_SELECT, BUTTON_7, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0}; // GPIO_NUM_MAX means no led
-physical_button_t start_button = { INPUT_START, BUTTON_8, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0};
-physical_button_t menu_button = {INPUT_MENU, 0, GPIO_NUM_MAX, false, false, false, false, false, AUTOFIRE_INITIAL_RATE, 0};
+physical_button_t select_button = { INPUT_SELECT, BUTTON_7, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE}; // GPIO_NUM_MAX means no led
+physical_button_t start_button = { INPUT_START, BUTTON_8, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE};
+physical_button_t menu_button = {INPUT_MENU, 0, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE};
 
 bool dpad_changed;
 uint8_t dpad_state;
@@ -115,11 +118,16 @@ void gamepad_setup(BleGamepad *bt_hid)
     // rtc_gpio_hold_en(INPUT_MENU);
 }
 
-void button_read(physical_button_t *button)
+void button_read(physical_button_t *button, bool alt)
 {
-    auto pressed = digitalRead(button->gpio_number) != HIGH;
+    auto readed = digitalRead(button->gpio_number) != HIGH;
+    auto pressed = readed && !alt;
     button->ph_changed_state = pressed != button->ph_pressed_state;
     button->ph_pressed_state = pressed;
+
+    auto alt_pressed = readed & alt;
+    button->alt_changed_state = alt_pressed != button->alt_pressed_state;
+    button->alt_pressed_state = alt_pressed;
 
     if(button->autofire && pressed) {
         auto now = millis();
@@ -144,6 +152,11 @@ void button_release(physical_button_t *button)
         button->ph_changed_state = true;
         button->auto_pressed_state = false;
         button->auto_changed_state = true;
+    }
+    if (!button->alt_changed_state && button->alt_pressed_state)
+    {
+        button->alt_pressed_state = false;
+        button->alt_changed_state = true;
     }
 }
 
@@ -198,12 +211,12 @@ bool dpad_read()
 
 void read_physical_buttons()
 {
-    button_read(&start_button);
-    button_read(&select_button);
-    button_read(&menu_button);
+    button_read(&menu_button, false);
+    button_read(&start_button, false);
+    button_read(&select_button, false);
     for (auto &button : buttons)
     {
-        button_read(&button);
+        button_read(&button, menu_button.ph_pressed_state);
     }
     dpad_changed = dpad_read();
 }
@@ -302,16 +315,32 @@ void send_button_hid(physical_button_t *button)
             bleHid->release(button->button);
         }
     }
+    if (button->alt_changed_state)
+    {
+        if (button->alt_pressed_state)
+        {
+            bleHid->press(button->alt_button);
+        }
+        else
+        {
+            bleHid->release(button->alt_button);
+        }
+    }
 }
 
 bool normal_loop(bool connected)
 {
-    if (menu_button.ph_changed_state && !menu_button.ph_pressed_state)
+    static bool some_pressed_while_menu_pressed = false;
+    if (menu_button.ph_changed_state)
     {
-        menu_mode = true;
-        last_button_pressed_on_menu = nullptr;
-        button_release_all();
-        dpad_release();
+        if(menu_button.ph_pressed_state) {
+            some_pressed_while_menu_pressed = false;
+        } else if(!some_pressed_while_menu_pressed) {
+            menu_mode = true;
+            last_button_pressed_on_menu = nullptr;
+            button_release_all();
+            dpad_release();
+        }
     }
 
     auto some_pressed = false;
@@ -321,8 +350,8 @@ bool normal_loop(bool connected)
     for (auto &button : buttons)
     {
         send_button_hid(&button);
-        button_led(&button, button.auto_pressed_state);
-        some_pressed |= button.auto_pressed_state;
+        button_led(&button, button.auto_pressed_state || button.alt_pressed_state);
+        some_pressed |= button.auto_pressed_state || button.alt_pressed_state;
     }
 
     if (dpad_changed)
@@ -336,6 +365,8 @@ bool normal_loop(bool connected)
                          {
                              digitalWrite(buttonLedList[led], lighted);
                          });
+
+    some_pressed_while_menu_pressed |= some_pressed;
     return some_pressed;
 }
 
