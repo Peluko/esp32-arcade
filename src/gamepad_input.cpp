@@ -43,6 +43,37 @@ const uint8_t dpad_map[] = {
     DPAD_CENTERED    // 1111 -> up + right + down + left
 };
 
+
+#if !defined USE_DPAD_HAT
+// If we want to use joy axis instead of DPAD (recommended for compatibility)
+// we use the direction definitions for DPAD and then translate to joy axis
+// using this table
+
+// #define DPAD_CENTERED 	0
+// #define DPAD_UP 		1
+// #define DPAD_UP_RIGHT 	2
+// #define DPAD_RIGHT 		3
+// #define DPAD_DOWN_RIGHT 4
+// #define DPAD_DOWN 		5
+// #define DPAD_DOWN_LEFT 	6
+// #define DPAD_LEFT 		7
+// #define DPAD_UP_LEFT 	8
+
+const signed char dpad_to_xy[9][2] =
+    {
+        { 0, 0},
+        { 0, -128},
+        { 127, -128},
+        { 127, 0},
+        { 127, 127},
+        { 0, 127},
+        { -128, 127},
+        { -128, 0},
+        { -128, -128}
+    };
+
+#endif
+
 /* DPAD input pins, used to construct the index to 'dpad_map'. MSB is first.
 */
 const uint8_t dpad_gpio_numbers[] = {
@@ -356,7 +387,11 @@ bool normal_loop(bool connected)
 
     if (dpad_changed)
     {
+#if defined USE_DPAD_HAT
         bleHid->setHat(dpad_state);
+#else
+        bleHid->setAxes(dpad_to_xy[dpad_state][0], dpad_to_xy[dpad_state][1], 0, 0, 0, DPAD_CENTERED);
+#endif
     }
     some_pressed |= dpad_state |= DPAD_CENTERED;
 
