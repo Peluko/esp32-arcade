@@ -108,8 +108,8 @@ physical_button_t buttons[] = {
     {INPUT_L, BUTTON_5, BUTTON_13, LED_L, AUTOFIRE_INITIAL_RATE},
     {INPUT_R, BUTTON_6, BUTTON_14, LED_R, AUTOFIRE_INITIAL_RATE}};
 
-physical_button_t select_button = { INPUT_SELECT, BUTTON_7, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE}; // GPIO_NUM_MAX means no led
-physical_button_t start_button = { INPUT_START, BUTTON_8, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE};
+physical_button_t select_button = { INPUT_SELECT, BUTTON_7, BUTTON_15, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE}; // GPIO_NUM_MAX means no led
+physical_button_t start_button = { INPUT_START, BUTTON_8, BUTTON_16, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE};
 physical_button_t menu_button = {INPUT_MENU, 0, 0, GPIO_NUM_MAX, AUTOFIRE_INITIAL_RATE};
 
 bool dpad_changed;
@@ -243,8 +243,8 @@ bool dpad_read()
 void read_physical_buttons()
 {
     button_read(&menu_button, false);
-    button_read(&start_button, false);
-    button_read(&select_button, false);
+    button_read(&start_button, menu_button.ph_pressed_state);
+    button_read(&select_button, menu_button.ph_pressed_state);
     for (auto &button : buttons)
     {
         button_read(&button, menu_button.ph_pressed_state);
@@ -374,10 +374,10 @@ bool normal_loop(bool connected)
         }
     }
 
-    auto some_pressed = false;
-
     send_button_hid(&select_button);
     send_button_hid(&start_button);
+
+    auto some_pressed = select_button.auto_pressed_state || select_button.alt_pressed_state || start_button.auto_pressed_state || start_button.alt_pressed_state;
     for (auto &button : buttons)
     {
         send_button_hid(&button);
