@@ -16,7 +16,7 @@ Blinker disconnectedBlinker(1000, 100);
 
 #define ONBOARD_LED 2
 
-#define SLEEP_TIME (5*60*1000)
+#define SLEEP_TIME (20*60*1000)
 #define SLEEP_LED_TIME_uS (5 * 1000000)
 void setup()
 {
