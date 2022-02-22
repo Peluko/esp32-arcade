@@ -122,6 +122,7 @@ BleGamepad *bleHid;
 void gamepad_setup(BleGamepad *bt_hid)
 {
     bleHid = bt_hid;
+    bleHid->autoNotify = false;
 
     for (const auto button : buttons)
     {
@@ -402,6 +403,7 @@ bool normal_loop(bool connected)
                          });
 
     some_pressed_while_menu_pressed |= some_pressed;
+    bleHid->notify();
     return some_pressed;
 }
 
